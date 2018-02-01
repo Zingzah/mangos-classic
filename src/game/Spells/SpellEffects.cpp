@@ -853,66 +853,6 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
 
                     return;
                 }
-                case 23173:                                 // Brood Affliction
-                {
-                    // This spell selects one brood affliction amongst five and apply it onto 15 targets
-                    // If there are less than 15 targets, then the spell loops over the targets again
-                    // until there are 15 appliance of the chosen brood affliction
-
-                    // Brood Affliction selection
-                    uint32 spellAfflict = 0;
-                    switch (urand(0, 4))
-                    {
-                        case 0: spellAfflict = 23153; break;            // Brood Affliction: Blue
-                        case 1: spellAfflict = 23154; break;            // Brood Affliction: Black
-                        case 2: spellAfflict = 23155; break;            // Brood Affliction: Red
-                        case 3: spellAfflict = 23170; break;            // Brood Affliction: Bronze
-                        case 4: spellAfflict = 23169; break;            // Brood Affliction: Green
-                    }
-
-                    // Get the fifteen (potentially duplicate) targets from threat list
-                    GuidVector vGuids;
-                    ((Creature*)m_caster)->FillGuidsListFromThreatList(vGuids);
-
-                    std::vector<Unit*> fifteenTargets;
-                    uint8 targetsCount = 0;
-                    while (targetsCount < 15)
-                    {
-                        for (GuidVector::const_iterator i = vGuids.begin(); i != vGuids.end(); ++i)
-                        {
-                            Unit* unit = m_caster->GetMap()->GetUnit(*i);
-                            if (unit && targetsCount < 15 && unit->GetTypeId() == TYPEID_PLAYER && unit->isAlive())
-                            {
-                                fifteenTargets.push_back(unit);
-                                targetsCount++;
-                            }
-                            else break;
-                        }
-                        // Prevent infinite loop: if fifteenTargets is still empty after first iteration: return
-                        if (targetsCount == 0)
-                        {
-                            return;
-                        }
-                    }
-
-                    for (auto unit : fifteenTargets)
-                    {
-                            // Cast Brood Affliction
-                            m_caster->CastSpell(unit, spellAfflict, TRIGGERED_OLD_TRIGGERED);
-
-                            // Cast Chromatic Mutation (23174) if target is now affected by all five brood afflictions
-                            if (unit->HasAura(23153, EFFECT_INDEX_0)
-                                    && unit->HasAura(23154, EFFECT_INDEX_0)
-                                    && unit->HasAura(23155, EFFECT_INDEX_0)
-                                    && unit->HasAura(23170, EFFECT_INDEX_0)
-                                    && unit->HasAura(23169, EFFECT_INDEX_0))
-                            {
-                                unit->RemoveAllAuras();
-                                m_caster->CastSpell(unit, 23174, TRIGGERED_OLD_TRIGGERED);
-                            }
-                    }
-                    return;
-                }
                 case 23450:                                 // Transporter Arrival - (Gadgetzan + Everlook)
                 {
                     uint32 rand = urand(0, 5);              // Roll for minor malfunctions:
@@ -948,35 +888,6 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
                 {
                     if (unitTarget && m_caster->IsWithinLOSInMap(unitTarget))
                         m_caster->CastSpell(unitTarget, 24020, TRIGGERED_OLD_TRIGGERED);
-
-                    return;
-                }
-                case 24150:                                 // Stinger Charge Primer
-                {
-                    if (unitTarget->HasAura(25187))
-                        m_caster->CastSpell(unitTarget, 25191, TRIGGERED_OLD_TRIGGERED);
-                    else
-                        m_caster->CastSpell(unitTarget, 25190, TRIGGERED_OLD_TRIGGERED);
-
-                    return;
-                }
-                case 26080:                                 // Stinger Charge Primer
-                {
-                    if (unitTarget->HasAura(26078))
-                        m_caster->CastSpell(unitTarget, 26082, TRIGGERED_OLD_TRIGGERED);
-                    else
-                        m_caster->CastSpell(unitTarget, 26081, TRIGGERED_OLD_TRIGGERED);
-
-                    return;
-                }
-                case 24721:                                 // Buru Transform
-                {
-                    // remaining Buru Eggs summon Hive'Zara Hatchlings and despawn
-                    if (unitTarget->GetEntry() == 15514)
-                    {
-                        unitTarget->CastSpell(unitTarget, 1881, TRIGGERED_OLD_TRIGGERED);
-                        ((Creature*)unitTarget)->ForcedDespawn();
-                    }
 
                     return;
                 }
@@ -2075,9 +1986,9 @@ void Spell::SendLoot(ObjectGuid guid, LootType loottype, LockType lockType)
                         break;
 
                     case GAMEOBJECT_TYPE_TRAP:
-                        if (lockType == LOCKTYPE_DISARM_TRAP || lockType == LOCKTYPE_NONE)
+                        if (lockType == LOCKTYPE_DISARM_TRAP)
                         {
-                            gameObjTarget->SetLootState(GO_ACTIVATED);
+                            gameObjTarget->SetLootState(GO_JUST_DEACTIVATED);
                             return;
                         }
                         sLog.outError("Spell::SendLoot unhandled locktype %u for GameObject trap (entry %u) for spell %u.", lockType, gameObjTarget->GetEntry(), m_spellInfo->Id);
@@ -2358,25 +2269,21 @@ void Spell::EffectSummon(SpellEffectIndex eff_idx)
     spawnCreature->InitStatsForLevel(level);
 
     if (CharmInfo* charmInfo = spawnCreature->GetCharmInfo())
+    {
+        charmInfo->SetReactState(REACT_DEFENSIVE);
         charmInfo->SetPetNumber(pet_number, false);
+    }
 
     // spawnCreature->SetName("");                          // generated by client
 
     map->Add((Creature*)spawnCreature);
     spawnCreature->AIM_Initialize();
-    spawnCreature->AI()->SetReactState(REACT_DEFENSIVE);
     spawnCreature->InitPetCreateSpells();
 
     m_caster->SetPet(spawnCreature);
 
     if (m_caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
-        spawnCreature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
-
-    if (m_caster->IsImmuneToNPC())
-        spawnCreature->SetImmuneToNPC(true);
-
-    if (m_caster->IsImmuneToPlayer())
-        spawnCreature->SetImmuneToPlayer(true);
+        spawnCreature->SetUInt32Value(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
 
     // Notify Summoner
     if (m_originalCaster && (m_originalCaster != m_caster) && (m_originalCaster->AI()))
@@ -2869,17 +2776,20 @@ void Spell::EffectSummonGuardian(SpellEffectIndex eff_idx)
         if (m_caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
             spawnCreature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
 
-        if (m_caster->IsImmuneToNPC())
-            spawnCreature->SetImmuneToNPC(true);
-
-        if (m_caster->IsImmuneToPlayer())
-            spawnCreature->SetImmuneToPlayer(true);
-
         if (m_caster->IsPvP())
             spawnCreature->SetPvP(true);
 
         if (CharmInfo* charmInfo = spawnCreature->GetCharmInfo())
+        {
             charmInfo->SetPetNumber(pet_number, false);
+
+            if (spawnCreature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC))
+                charmInfo->SetReactState(REACT_PASSIVE);
+            else if (cInfo->ExtraFlags & CREATURE_EXTRA_FLAG_NO_MELEE)
+                charmInfo->SetReactState(REACT_DEFENSIVE);
+            else
+                charmInfo->SetReactState(REACT_AGGRESSIVE);
+        }
 
         m_caster->AddGuardian(spawnCreature);
 
@@ -3089,19 +2999,12 @@ void Spell::EffectTameCreature(SpellEffectIndex /*eff_idx*/)
     pet->setFaction(plr->getFaction());
     pet->SetUInt32Value(UNIT_CREATED_BY_SPELL, m_spellInfo->Id);
 
-    if (plr->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
-        pet->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
-
-    if (plr->IsImmuneToNPC())
-        pet->SetImmuneToNPC(true);
-
-    if (plr->IsImmuneToPlayer())
-        pet->SetImmuneToPlayer(true);
-
     if (plr->IsPvP())
         pet->SetPvP(true);
 
     pet->GetCharmInfo()->SetPetNumber(sObjectMgr.GeneratePetNumber(), true);
+
+    pet->GetCharmInfo()->SetReactState(REACT_DEFENSIVE);
 
     uint32 level = creatureTarget->getLevel();
     pet->InitStatsForLevel(level);
@@ -3117,7 +3020,6 @@ void Spell::EffectTameCreature(SpellEffectIndex /*eff_idx*/)
     // add pet object to the world
     pet->GetMap()->Add((Creature*)pet);
     pet->AIM_Initialize();
-    pet->AI()->SetReactState(REACT_DEFENSIVE);
 
     // visual effect for levelup
     pet->SetUInt32Value(UNIT_FIELD_LEVEL, level);
@@ -3220,6 +3122,7 @@ void Spell::EffectSummonPet(SpellEffectIndex eff_idx)
             level = resultLevel;
     }
 
+    NewSummon->GetCharmInfo()->SetReactState(REACT_DEFENSIVE);
     NewSummon->SetOwnerGuid(m_caster->GetObjectGuid());
     NewSummon->setFaction(m_caster->getFaction());
     NewSummon->SetUInt32Value(UNIT_FIELD_PET_NAME_TIMESTAMP, uint32(time(nullptr)));
@@ -3230,22 +3133,12 @@ void Spell::EffectSummonPet(SpellEffectIndex eff_idx)
 
     map->Add((Creature*)NewSummon);
     NewSummon->AIM_Initialize();
-    NewSummon->AI()->SetReactState(REACT_DEFENSIVE);
 
     m_caster->SetPet(NewSummon);
     DEBUG_LOG("New Pet has guid %u", NewSummon->GetGUIDLow());
 
     if (m_caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
         NewSummon->SetUInt32Value(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
-
-    if (m_caster->IsImmuneToNPC())
-        NewSummon->SetImmuneToNPC(true);
-
-    if (m_caster->IsImmuneToPlayer())
-        NewSummon->SetImmuneToPlayer(true);
-
-    if (m_caster->IsPvP())
-        NewSummon->SetPvP(true);
 
     if (m_caster->GetTypeId() == TYPEID_PLAYER)
     {
@@ -3258,6 +3151,9 @@ void Spell::EffectSummonPet(SpellEffectIndex eff_idx)
         // generate new name for summon pet
         NewSummon->SetName(sObjectMgr.GeneratePetName(petentry));
 
+        if (m_caster->IsPvP())
+            NewSummon->SetPvP(true);
+
         NewSummon->LearnPetPassives();
         NewSummon->CastPetAuras(true);
         NewSummon->CastOwnerTalentAuras();
@@ -3269,8 +3165,8 @@ void Spell::EffectSummonPet(SpellEffectIndex eff_idx)
     }
     else
     {
-        NewSummon->SetFlag(UNIT_FIELD_FLAGS, cInfo->UnitFlags);
         NewSummon->SetUInt32Value(UNIT_NPC_FLAGS, cInfo->NpcFlags);
+        NewSummon->SetUInt32Value(UNIT_FIELD_FLAGS, cInfo->UnitFlags);
 
         // Notify Summoner
         if (m_originalCaster && (m_originalCaster != m_caster) && (m_originalCaster->AI()))
@@ -3532,7 +3428,6 @@ void Spell::EffectSummonObjectWild(SpellEffectIndex eff_idx)
 
     // Wild object not have owner and check clickable by players
     map->Add(pGameObj);
-    pGameObj->AIM_Initialize();
 
     if (pGameObj->GetGoType() == GAMEOBJECT_TYPE_FLAGDROP && m_caster->GetTypeId() == TYPEID_PLAYER)
     {
@@ -3794,32 +3689,6 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                     unitTarget->CastSpell(unitTarget, roll_chance_i(50) ? 24714 : 24715, TRIGGERED_OLD_TRIGGERED);
                     return;
                 }
-                case 25671:                                 // Drain Mana
-                case 25755:
-                {
-                    unitTarget->CastSpell(m_caster, 26639, TRIGGERED_OLD_TRIGGERED);
-                    return;
-                }
-                case 25676: // Moam                         // Drain Mana
-                case 26559: // Obsidian Nullifier
-                {
-                    m_caster->CastSpell(unitTarget, 25671, TRIGGERED_OLD_TRIGGERED);
-                    return;
-                }
-                case 25684:                                 // Summon Mana Fiends
-                {
-                    m_caster->CastSpell(m_caster, 25681, TRIGGERED_OLD_TRIGGERED);
-                    m_caster->CastSpell(m_caster, 25682, TRIGGERED_OLD_TRIGGERED);
-                    m_caster->CastSpell(m_caster, 25683, TRIGGERED_OLD_TRIGGERED);
-
-                    return;
-                }
-                case 25754: // Obsidian Destroyer           // Drain Mana
-                case 26457: // Obsidian Eradicator
-                {
-                    m_caster->CastSpell(unitTarget, 25755, TRIGGERED_OLD_TRIGGERED);
-                    return;
-                }
                 case 26004:                                 // Mistletoe
                 {
                     if (!unitTarget)
@@ -3877,6 +3746,205 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
 
                     return;
                 }
+                case 26663:    // Valentine - Orgrimmar Grunt
+		{
+		        if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+		                return;
+		        uint32 PledgeGiftOrHeartbroken = 27247; // Cast Pledge of Friendship by default
+		        uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+		        if (!urand(0, RewardToHeartbrokenRatio))
+			        PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+		        else if (!unitTarget->HasAura(26680))
+		        {
+			        PledgeGiftOrHeartbroken = 27507;	// Pledge of Adoration
+			        m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+		        }
+		        m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+		        ((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+		        return;
+		}
+		case 26678:                                 // Create Heart Candy
+		{
+
+		        uint32 spellId = 0;
+
+		        switch (urand(0, 7))
+		        {
+		                case 0: spellId = 26668; break;
+		                case 1: spellId = 26670; break;
+		                case 2: spellId = 26671; break;
+		                case 3: spellId = 26672; break;
+		                case 4: spellId = 26673; break;
+		                case 5: spellId = 26674; break;
+		                case 6: spellId = 26675; break;
+		                case 7: spellId = 26676; break;
+		        }
+
+		        m_caster->CastSpell(m_caster, spellId, TRIGGERED_OLD_TRIGGERED);
+		        return;
+		}
+		case 26923:   // Valentine - Thunderbluff Watcher
+		{
+		        if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+			        return;
+		        uint32 PledgeGiftOrHeartbroken = 27248; // Cast Pledge of Friendship by default
+		        uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+	                if (!urand(0, RewardToHeartbrokenRatio))
+		                PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+		        else if (!unitTarget->HasAura(26680))
+		        {
+			        PledgeGiftOrHeartbroken = 27513;	// Pledge of Adoration
+			        m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+		        }
+		        m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+		        ((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+		        return;
+		}
+		case 26924:                                 // Valentine - Undercity Guardian
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+			uint32 PledgeGiftOrHeartbroken = 27246; // Cast Pledge of Friendship by default
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+				PledgeGiftOrHeartbroken = 27515;	// Pledge of Adoration
+				m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+		}
+		case 27541:                                 // Valentine - Darnassus Sentinel
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+			uint32 PledgeGiftOrHeartbroken = 27245; // Cast Pledge of Friendship by default
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+				PledgeGiftOrHeartbroken = 27504;	// Pledge of Adoration
+				m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+		}
+		case 27547:                                 // Valentine - Ironforge Guard
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+			uint32 PledgeGiftOrHeartbroken = 27244; // Cast Pledge of Friendship(IF) by default
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+			PledgeGiftOrHeartbroken = 27506;	// Pledge of Adoration(IF)
+			m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+		}
+		case 27548:                                 // Valentine - Stormwind City Guard
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+			uint32 PledgeGiftOrHeartbroken = 27242; // Cast Pledge of Friendship by default
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+				PledgeGiftOrHeartbroken = 27510;	// Pledge of Adoration
+				m_caster->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			m_caster->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+		}
+		case 27549:                                 // Valentine - Horde Civilian
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+
+			uint32 PledgeGiftOrHeartbroken;
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			switch (m_caster->getFaction())
+			{
+				case 29:  PledgeGiftOrHeartbroken = 27523; break; // GoF Org
+				case 104: PledgeGiftOrHeartbroken = 27524; break; // GoF TB
+				case 68:  PledgeGiftOrHeartbroken = 27529; break; // GoF UC	
+				default:
+				return;
+			}
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+				switch (m_caster->getFaction())
+				{
+					case 29:  PledgeGiftOrHeartbroken = 27505; break; // GoA Org	
+					case 104: PledgeGiftOrHeartbroken = 27511; break; // GoA TB
+					case 68:  PledgeGiftOrHeartbroken = 27512; break; // GoA UC	
+					default:
+					return;
+				}
+				unitTarget->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			unitTarget->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+
+		}
+		case 27550:                                 // Valentine - Alliance Civilian
+		{
+			if (!unitTarget || unitTarget->GetTypeId() != TYPEID_PLAYER)
+				return;
+
+			uint32 PledgeGiftOrHeartbroken;
+			uint16 RewardToHeartbrokenRatio = 5;    // Sets 1 in 6 chance to cast Heartbroken
+
+			switch (m_caster->getFaction())
+			{
+				case 12: PledgeGiftOrHeartbroken = 27525; break; // GoF SW
+				case 55: PledgeGiftOrHeartbroken = 27520; break; // GoF IF
+				case 80: PledgeGiftOrHeartbroken = 27519; break; // GoF Darnassus
+				default:
+				return;
+			}
+			if (!urand(0, RewardToHeartbrokenRatio))
+				PledgeGiftOrHeartbroken = 26898;	// Heartbroken
+			else if (!unitTarget->HasAura(26680))
+			{
+				PledgeGiftOrHeartbroken = 26901;
+				switch (m_caster->getFaction())
+				{
+                                        case 12: PledgeGiftOrHeartbroken = 27509; break; // GoA SW
+					case 55: PledgeGiftOrHeartbroken = 27503; break; // GoA IF
+					case 80: PledgeGiftOrHeartbroken = 26901; break; // GoA Darnassus
+					default:
+					return;
+				}
+				unitTarget->CastSpell(unitTarget, 26680, TRIGGERED_OLD_TRIGGERED);
+			}
+			unitTarget->CastSpell(unitTarget, PledgeGiftOrHeartbroken, TRIGGERED_OLD_TRIGGERED);
+			((Player*)unitTarget)->DestroyItemCount(21815, 1, true, false);  // remove 1 love token on cast from inventory
+			return;
+
+		}
                 case 27687:                                 // Summon Bone Minions
                 {
                     if (!unitTarget)
@@ -4159,8 +4227,6 @@ void Spell::EffectDuel(SpellEffectIndex eff_idx)
 
     m_caster->AddGameObject(pGameObj);
     map->Add(pGameObj);
-    pGameObj->AIM_Initialize();
-
     // END
 
     // Send request
@@ -4200,39 +4266,20 @@ void Spell::EffectStuck(SpellEffectIndex /*eff_idx*/)
     Player* pTarget = (Player*)unitTarget;
 
     DEBUG_LOG("Spell Effect: Stuck");
-    DETAIL_LOG("Player %s (guid %u) used auto-unstuck feature at map %u (%f, %f, %f)", pTarget->GetName(), pTarget->GetGUIDLow(), m_caster->GetMapId(), m_caster->GetPositionX(), pTarget->GetPositionY(), pTarget->GetPositionZ());
+    DETAIL_LOG("Player %s (guid %u) used auto-unstuck future at map %u (%f, %f, %f)", pTarget->GetName(), pTarget->GetGUIDLow(), m_caster->GetMapId(), m_caster->GetPositionX(), pTarget->GetPositionY(), pTarget->GetPositionZ());
 
     if (pTarget->IsTaxiFlying())
         return;
 
-    // If the player is dead, it will return them to the graveyard closest to their corpse.
-    if (pTarget->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST))
-    {
-        pTarget->RepopAtGraveyard();
-        return;
-    }
+    // homebind location is loaded always
+    pTarget->TeleportToHomebind(unitTarget == m_caster ? TELE_TO_SPELL : 0);
 
-    // If the player is alive, and their hearthstone is in their inventory, and their hearthstone
-    // is cooled down, it will activate their hearthstone. The 30 minute hearthstone cooldown is activated as usual.
-    if (pTarget->IsSpellReady(8690) && pTarget->HasItemCount(6948, 1, false))
-    {
-        pTarget->TeleportToHomebind(unitTarget == m_caster ? TELE_TO_SPELL : 0);
-        // Trigger cooldown
-        SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(8690);
-        if (!spellInfo)
-            return;
-        Spell spell(pTarget, spellInfo, TRIGGERED_OLD_TRIGGERED);
-        spell.SendSpellCooldown();
-    }
-    else
-    {
-        // If the player is alive, but their hearthstone is either not in their inventory (e.g. in the bank) or
-        // their hearthstone is on cooldown, then the game will try to "nudge" the player in a seemingly random direction.
-        // @todo This check could possibly more accurately find a safe position to port to, has the potential for porting underground.
-        float x, y, z;
-        pTarget->GetNearPoint(pTarget, x, y, z, DEFAULT_WORLD_OBJECT_SIZE, 10.0f, pTarget->GetOrientation());
-        pTarget->NearTeleportTo(x, y, z, pTarget->GetOrientation());
-    }
+    // Stuck spell trigger Hearthstone cooldown
+    SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(8690);
+    if (!spellInfo)
+        return;
+    Spell spell(pTarget, spellInfo, true);
+    spell.SendSpellCooldown();
 }
 
 void Spell::EffectSummonPlayer(SpellEffectIndex /*eff_idx*/)
@@ -4419,12 +4466,6 @@ void Spell::EffectSummonTotem(SpellEffectIndex eff_idx)
 
     if (m_caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
         pTotem->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
-
-    if (m_caster->IsImmuneToNPC())
-        pTotem->SetImmuneToNPC(true);
-
-    if (m_caster->IsImmuneToPlayer())
-        pTotem->SetImmuneToPlayer(true);
 
     if (m_caster->IsPvP())
         pTotem->SetPvP(true);
@@ -4654,8 +4695,6 @@ void Spell::EffectSummonObject(SpellEffectIndex eff_idx)
     m_caster->AddGameObject(pGameObj);
 
     map->Add(pGameObj);
-    pGameObj->AIM_Initialize();
-
     WorldPacket data(SMSG_GAMEOBJECT_SPAWN_ANIM_OBSOLETE, 8);
     data << ObjectGuid(pGameObj->GetObjectGuid());
     m_caster->SendMessageToSet(data, true);
@@ -4934,7 +4973,7 @@ void Spell::EffectSummonCritter(SpellEffectIndex eff_idx)
     critter->SelectLevel();                                 // some summoned critters have different from 1 DB data for level/hp
     const CreatureInfo* info = critter->GetCreatureInfo();
     // Some companions have additional UNIT_FLAG_NON_ATTACKABLE (0x2), perphaps coming from template, so add template flags
-    critter->SetUInt32Value(UNIT_FIELD_FLAGS, info->UnitFlags);
+    critter->SetUInt32Value(UNIT_FIELD_FLAGS, (UNIT_FLAG_IMMUNE_TO_PLAYER | UNIT_FLAG_IMMUNE_TO_NPC | info->UnitFlags));
     critter->SetUInt32Value(UNIT_NPC_FLAGS, info->NpcFlags);// some companions may have quests, so they need npc flags
     critter->InitPetCreateSpells();                         // some companions may have spells (e.g. disgusting oozeling)
     if (m_duration > 0)                                     // set timer for unsummon
@@ -4944,12 +4983,6 @@ void Spell::EffectSummonCritter(SpellEffectIndex eff_idx)
 
     if (player->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
         critter->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
-
-    // NOTE: All companions should have these (creatureinfo needs to be tuned accordingly before we can remove these two lines):
-    critter->SetImmuneToNPC(true);
-    critter->SetImmuneToPlayer(true);
-
-    // NOTE: Do not set PvP flags (confirmed) for companions.
 
     critter->SetByteValue(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_SUPPORTABLE | UNIT_BYTE2_FLAG_UNK5);
 
@@ -5253,7 +5286,6 @@ void Spell::EffectTransmitted(SpellEffectIndex eff_idx)
     // m_ObjToDel.push_back(pGameObj);
 
     cMap->Add(pGameObj);
-    pGameObj->AIM_Initialize();
 
     pGameObj->SummonLinkedTrapIfAny();
 
